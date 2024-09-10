@@ -66,7 +66,11 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void Set_PWM_Duty_Cycle(uint32_t pwm_value)
+{
+    // Set the PWM compare value directly
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm_value);
+}
 /* USER CODE END 0 */
 
 /**
@@ -102,6 +106,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C2_Init();
   MX_TIM7_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   HD44780_Init(2);
   HD44780_Clear();
@@ -112,15 +117,15 @@ int main(void)
   bmp280.i2c = &hi2c1;
 
   HAL_TIM_Base_Start(&htim7);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
 
   void TIM7_Delay(uint32_t ms)
   {
       for (uint32_t i = 0; i < ms; i++)
       {
-          __HAL_TIM_SET_COUNTER(&htim7, 0);  // Reset the counter to 0
-          while (__HAL_TIM_GET_COUNTER(&htim7) < 6)  // Wait for 1 ms
+          __HAL_TIM_SET_COUNTER(&htim7, 0);
+          while (__HAL_TIM_GET_COUNTER(&htim7) < 6)
           {
-              // Busy wait
           }
       }
   }
@@ -136,6 +141,8 @@ int main(void)
   bool bme280p = bmp280.id == BME280_CHIP_ID;
   size = sprintf((char *)Data, "BMP280: found %s\r\n", bme280p ? "BME280" : "BMP280");
   HAL_UART_Transmit(&huart2, Data, size, 1000);
+
+  TIM1->CCR1 = 0;
 
   // Initialize the GPIO pin (PA8)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -159,7 +166,8 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {HAL_Delay(100);
+  {
+	  HAL_Delay(100);
   while (!bmp280_read_float(&bmp280, &temperature, &pressure, &humidity)) {
       size = sprintf((char *)Data,
               "Temperature/pressure reading failed\r\n");
@@ -187,30 +195,32 @@ int main(void)
   size = sprintf((char *)Data, "%.2f%%", humidity);
   HD44780_PrintStr((char *)Data);
 
-  if (temperature > 30.0f) {
-      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
-  } else {
-      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+  uint32_t pwm_value = 0;
+          if (temperature > 30.0f)
+          {
+              pwm_value = 1000;
+              HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
+          }
+          else if (temperature >= 27.0f && temperature <= 30.0f)
+          {
+              pwm_value = 500;
+              HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
+          }
+          else
+          {
+              pwm_value = 0;
+              HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+          }
+          Set_PWM_Duty_Cycle(pwm_value);
 
-  }
-
-  if (bme280p) {
-      size = sprintf((char *)Data,", Humidity: %.2f\r\n", humidity);
-      HAL_UART_Transmit(&huart2, Data, size, 1000);
-  } else {
-      size = sprintf((char *)Data, "\r\n");
-      HAL_UART_Transmit(&huart2, Data, size, 1000);
-  }
-
-  TIM7_Delay(5000);
+          TIM7_Delay(5000);
+      }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
-}
+
 
 /**
   * @brief System Clock Configuration
