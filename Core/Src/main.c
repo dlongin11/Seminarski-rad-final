@@ -18,8 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "stm32f4xx_hal.h"
 #include "i2c.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -101,7 +101,7 @@ int main(void)
   MX_I2C1_Init();
   MX_USART2_UART_Init();
   MX_I2C2_Init();
-
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
   HD44780_Init(2);
   HD44780_Clear();
@@ -110,6 +110,21 @@ int main(void)
   bmp280_init_default_params(&bmp280.params);
   bmp280.addr = BMP280_I2C_ADDRESS_0;
   bmp280.i2c = &hi2c1;
+
+  HAL_TIM_Base_Start(&htim7);
+
+  void TIM7_Delay(uint32_t ms)
+  {
+      for (uint32_t i = 0; i < ms; i++)
+      {
+          __HAL_TIM_SET_COUNTER(&htim7, 0);  // Reset the counter to 0
+          while (__HAL_TIM_GET_COUNTER(&htim7) < 6)  // Wait for 1 ms
+          {
+              // Busy wait
+          }
+      }
+  }
+
 
   while (!bmp280_init(&bmp280, &bmp280.params))
   {
@@ -144,55 +159,55 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {
-      /* USER CODE END WHILE */
-      HAL_Delay(100);
-      while (!bmp280_read_float(&bmp280, &temperature, &pressure, &humidity)) {
-          size = sprintf((char *)Data,
-                  "Temperature/pressure reading failed\r\n");
-          HAL_UART_Transmit(&huart2, Data, size, 1000);
-          HAL_Delay(2000);
-      }
-
-      size = sprintf((char *)Data,"Pressure: %.2f Pa, Temperature: %.2f C",
-              pressure, temperature);
+  {HAL_Delay(100);
+  while (!bmp280_read_float(&bmp280, &temperature, &pressure, &humidity)) {
+      size = sprintf((char *)Data,
+              "Temperature/pressure reading failed\r\n");
       HAL_UART_Transmit(&huart2, Data, size, 1000);
+      HAL_Delay(2000);
+  }
 
-      HD44780_Clear();
+  size = sprintf((char *)Data,"Pressure: %.2f Pa, Temperature: %.2f C",
+          pressure, temperature);
+  HAL_UART_Transmit(&huart2, Data, size, 1000);
 
-      HD44780_SetCursor(0, 0);
-      HD44780_PrintStr("Temp:");
+  HD44780_Clear();
 
-      HD44780_SetCursor(6, 0);
-      size = sprintf((char *)Data, "%.2f C", temperature);
-      HD44780_PrintStr((char *)Data);
+  HD44780_SetCursor(0, 0);
+  HD44780_PrintStr("Temp:");
 
-      HD44780_SetCursor(0, 1);
-      HD44780_PrintStr("Humidity:");
+  HD44780_SetCursor(6, 0);
+  size = sprintf((char *)Data, "%.2f C", temperature);
+  HD44780_PrintStr((char *)Data);
 
-      HD44780_SetCursor(10, 1);
-      size = sprintf((char *)Data, "%.2f%%", humidity);
-      HD44780_PrintStr((char *)Data);
+  HD44780_SetCursor(0, 1);
+  HD44780_PrintStr("Humidity:");
 
-      if (temperature > 30.0f) {
-          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
-          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
-      } else {
-          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
-          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+  HD44780_SetCursor(10, 1);
+  size = sprintf((char *)Data, "%.2f%%", humidity);
+  HD44780_PrintStr((char *)Data);
 
-      }
+  if (temperature > 30.0f) {
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
+  } else {
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
 
-      if (bme280p) {
-          size = sprintf((char *)Data,", Humidity: %.2f\r\n", humidity);
-          HAL_UART_Transmit(&huart2, Data, size, 1000);
-      } else {
-          size = sprintf((char *)Data, "\r\n");
-          HAL_UART_Transmit(&huart2, Data, size, 1000);
-      }
+  }
 
-      HAL_Delay(5000);
-      /* USER CODE BEGIN 3 */
+  if (bme280p) {
+      size = sprintf((char *)Data,", Humidity: %.2f\r\n", humidity);
+      HAL_UART_Transmit(&huart2, Data, size, 1000);
+  } else {
+      size = sprintf((char *)Data, "\r\n");
+      HAL_UART_Transmit(&huart2, Data, size, 1000);
+  }
+
+  TIM7_Delay(5000);
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
 }
@@ -263,3 +278,19 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
